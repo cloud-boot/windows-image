@@ -13,7 +13,11 @@ vars:
   ARM64_OUT:    BOOTAA64.EFI
   AMD64_TARGET: targets/uefi-amd64.json
   ARM64_TARGET: targets/uefi-arm64.json
-  PECTL:        '{{.PECTL | default "../../../go-coff/pectl"}}'
+  # ⛔ NO DEFAULT, deliberately. This defaulted to ../../../go-coff/pectl,
+  # which resolves only if a go-coff checkout happens to sit beside this one.
+  # It does on the machine where this was written; it does not in CI, and the
+  # failure there names a missing directory rather than a missing setting.
+  PECTL:        '{{.PECTL}}'
   REGISTRY:     '{{.REGISTRY | default "ghcr.io/cloud-boot/windows-stub"}}'
   TAG:          '{{.TAG | default "latest"}}'
 
@@ -33,6 +37,11 @@ tasks:
       - clang -target x86_64-pc-windows-gnu -c thunk-amd64.S -o thunk-amd64.o
 
   compile-amd64:
+    # GOWORK=off so the build does not depend on whatever go.work happens to
+    # surround this checkout: in CI there is none, and inside the umbrella tree
+    # there is one that does not list this module.
+    env:
+      GOWORK: "off"
     deps: [thunk-amd64]
     sources: [main.go, "{{.AMD64_TARGET}}"]
     generates: [main-amd64.o]
@@ -40,18 +49,20 @@ tasks:
       - tinygo build -target={{.AMD64_TARGET}} -o main-amd64.o .
 
   link-amd64:
+    preconditions:
+      - sh: test -n "{{.PECTL}}"
+        msg: "PECTL is unset: pass PECTL=<path to a go-coff/pectl checkout>, e.g. task build-amd64 PECTL=../../go-coff/pectl"
     deps: [compile-amd64]
     sources: [main-amd64.o, thunk-amd64.o]
     generates: ["{{.AMD64_OUT}}"]
     cmds:
-      - >-
-        (cd {{.PECTL}} && go run . link
-          --machine amd64
-          --entry efi_main
-          --image-base 0x10000
-          --allow-unresolved
-          --output $OLDPWD/{{.AMD64_OUT}}
-          $OLDPWD/main-amd64.o $OLDPWD/thunk-amd64.o)
+      # ⛔ ONE LINE, deliberately. This was a `>-` folded block whose
+      # continuation lines were indented deeper than the first -- and YAML
+      # KEEPS the newlines of more-indented lines inside a folded scalar. So
+      # the shell got `go run . link` on its own and pectl answered "requires
+      # at least 1 arg(s), only received 0", with the flags arriving as
+      # separate commands. It had never worked, and there was no CI to say so.
+      - "(cd {{.PECTL}} && go run . link --machine amd64 --entry efi_main --image-base 0x10000 --allow-unresolved --output $OLDPWD/{{.AMD64_OUT}} $OLDPWD/main-amd64.o $OLDPWD/thunk-amd64.o)"
 
   build-amd64:
     desc: Build BOOTX64.EFI end-to-end.
@@ -68,6 +79,11 @@ tasks:
       - clang -target aarch64-pc-windows-gnu -c thunk-arm64.S -o thunk-arm64.o
 
   compile-arm64:
+    # GOWORK=off so the build does not depend on whatever go.work happens to
+    # surround this checkout: in CI there is none, and inside the umbrella tree
+    # there is one that does not list this module.
+    env:
+      GOWORK: "off"
     deps: [thunk-arm64]
     sources: [main.go, "{{.ARM64_TARGET}}"]
     generates: [main-arm64.o]
@@ -75,18 +91,15 @@ tasks:
       - tinygo build -target={{.ARM64_TARGET}} -o main-arm64.o .
 
   link-arm64:
+    preconditions:
+      - sh: test -n "{{.PECTL}}"
+        msg: "PECTL is unset: pass PECTL=<path to a go-coff/pectl checkout>, e.g. task build-arm64 PECTL=../../go-coff/pectl"
     deps: [compile-arm64]
     sources: [main-arm64.o, thunk-arm64.o]
     generates: ["{{.ARM64_OUT}}"]
     cmds:
-      - >-
-        (cd {{.PECTL}} && go run . link
-          --machine arm64
-          --entry efi_main
-          --image-base 0x10000
-          --allow-unresolved
-          --output $OLDPWD/{{.ARM64_OUT}}
-          $OLDPWD/main-arm64.o $OLDPWD/thunk-arm64.o)
+      # One line, for the reason given on link-amd64.
+      - "(cd {{.PECTL}} && go run . link --machine arm64 --entry efi_main --image-base 0x10000 --allow-unresolved --output $OLDPWD/{{.ARM64_OUT}} $OLDPWD/main-arm64.o $OLDPWD/thunk-arm64.o)"
 
   build-arm64:
     desc: Build BOOTAA64.EFI end-to-end.
