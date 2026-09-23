@@ -1,0 +1,18 @@
+{
+    "llvm-target": "x86_64-pc-windows-gnu",
+    "cpu":         "x86-64",
+    "features":    "",
+    "build-tags":  ["uefi", "tinygo.uefi"],
+    "goos":        "linux",
+    "goarch":      "amd64",
+    "linker":      "ld.lld",
+    "rtlib":       "compiler-rt",
+    "libc":        "",
+    "gc":          "leaking",
+    "scheduler":   "none",
+    "default-stack-size": 32768,
+    "cflags": [
+        "-ffreestanding"
+    ],
+    "_comment": "Same shape as go-coff/stub/targets/uefi-amd64.json; goos=linux to keep TinyGo's stdlib happy, llvm-target windows-gnu so LLVM emits COFF/PE."
+}

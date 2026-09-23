@@ -1,0 +1,18 @@
+{
+    "llvm-target": "aarch64-pc-windows-gnu",
+    "cpu":         "generic",
+    "features":    "",
+    "build-tags":  ["uefi", "tinygo.uefi"],
+    "goos":        "linux",
+    "goarch":      "arm64",
+    "linker":      "ld.lld",
+    "rtlib":       "compiler-rt",
+    "libc":        "",
+    "gc":          "leaking",
+    "scheduler":   "none",
+    "default-stack-size": 32768,
+    "cflags": [
+        "-ffreestanding"
+    ],
+    "_comment": "Same shape as go-coff/stub/targets/uefi-arm64.json."
+}

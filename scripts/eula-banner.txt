@@ -1,0 +1,21 @@
+
+==============================================================================
+  EULA REMINDER — Microsoft dev VM / eval ISO terms
+
+  By downloading and using a Microsoft dev VM or Windows Server eval ISO
+  you have agreed to:
+
+  - Microsoft Software License Terms
+    (https://aka.ms/usewindowsdevvms)
+  - Time-limited eval (90 days for dev VMs, 180 days for Server eval)
+  - NO REDISTRIBUTION of the binary you've downloaded
+
+  The cloud-boot/windows-image repo does NOT host any Microsoft binary.
+  This download.sh script runs only on YOUR machine; the resulting VHDX /
+  ISO stays in YOUR workspace; any OCI push goes to YOUR private GHCR
+  namespace (you set $WINDOWS_OCI_REGISTRY to point there).
+
+  For routing-only tests that DON'T need a real Windows boot, use the
+  windows-stub instead — it's BSD-licensed and published publicly at
+  ghcr.io/cloud-boot/windows-stub:latest .
+==============================================================================

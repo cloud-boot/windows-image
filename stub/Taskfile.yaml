@@ -1,0 +1,141 @@
+# Build the windows-stub PE binaries (BOOTX64.EFI + BOOTAA64.EFI)
+# and optionally publish them as an OCI artifact to ghcr.io.
+#
+# This is intentionally a thinner mirror of go-coff/stub/Taskfile.yaml
+# — same flow (thunk → compile → link), but ONE binary per arch and
+# no QEMU smoke tests (the stub is used from inside cloud-boot's own
+# test-windows.sh, not standalone).
+
+version: '3'
+
+vars:
+  AMD64_OUT:    BOOTX64.EFI
+  ARM64_OUT:    BOOTAA64.EFI
+  AMD64_TARGET: targets/uefi-amd64.json
+  ARM64_TARGET: targets/uefi-arm64.json
+  PECTL:        '{{.PECTL | default "../../../go-coff/pectl"}}'
+  REGISTRY:     '{{.REGISTRY | default "ghcr.io/cloud-boot/windows-stub"}}'
+  TAG:          '{{.TAG | default "latest"}}'
+
+tasks:
+
+  default:
+    desc: List tasks.
+    cmds: ['task --list-all']
+    silent: true
+
+  # ----- amd64 -----
+
+  thunk-amd64:
+    sources: [thunk-amd64.S]
+    generates: [thunk-amd64.o]
+    cmds:
+      - clang -target x86_64-pc-windows-gnu -c thunk-amd64.S -o thunk-amd64.o
+
+  compile-amd64:
+    deps: [thunk-amd64]
+    sources: [main.go, "{{.AMD64_TARGET}}"]
+    generates: [main-amd64.o]
+    cmds:
+      - tinygo build -target={{.AMD64_TARGET}} -o main-amd64.o .
+
+  link-amd64:
+    deps: [compile-amd64]
+    sources: [main-amd64.o, thunk-amd64.o]
+    generates: ["{{.AMD64_OUT}}"]
+    cmds:
+      - >-
+        (cd {{.PECTL}} && go run . link
+          --machine amd64
+          --entry efi_main
+          --image-base 0x10000
+          --allow-unresolved
+          --output $OLDPWD/{{.AMD64_OUT}}
+          $OLDPWD/main-amd64.o $OLDPWD/thunk-amd64.o)
+
+  build-amd64:
+    desc: Build BOOTX64.EFI end-to-end.
+    deps: [link-amd64]
+    cmds:
+      - file {{.AMD64_OUT}}
+
+  # ----- arm64 -----
+
+  thunk-arm64:
+    sources: [thunk-arm64.S]
+    generates: [thunk-arm64.o]
+    cmds:
+      - clang -target aarch64-pc-windows-gnu -c thunk-arm64.S -o thunk-arm64.o
+
+  compile-arm64:
+    deps: [thunk-arm64]
+    sources: [main.go, "{{.ARM64_TARGET}}"]
+    generates: [main-arm64.o]
+    cmds:
+      - tinygo build -target={{.ARM64_TARGET}} -o main-arm64.o .
+
+  link-arm64:
+    deps: [compile-arm64]
+    sources: [main-arm64.o, thunk-arm64.o]
+    generates: ["{{.ARM64_OUT}}"]
+    cmds:
+      - >-
+        (cd {{.PECTL}} && go run . link
+          --machine arm64
+          --entry efi_main
+          --image-base 0x10000
+          --allow-unresolved
+          --output $OLDPWD/{{.ARM64_OUT}}
+          $OLDPWD/main-arm64.o $OLDPWD/thunk-arm64.o)
+
+  build-arm64:
+    desc: Build BOOTAA64.EFI end-to-end.
+    deps: [link-arm64]
+    cmds:
+      - file {{.ARM64_OUT}}
+
+  # ----- packaging + OCI push -----
+
+  package:
+    desc: Stage both BOOTX64.EFI + BOOTAA64.EFI into a layout suitable for ORAS push.
+    deps: [build-amd64, build-arm64]
+    generates: [windows-stub-bundle/manifest.json]
+    cmds:
+      - mkdir -p windows-stub-bundle/EFI/BOOT
+      - cp {{.AMD64_OUT}} windows-stub-bundle/EFI/BOOT/BOOTX64.EFI
+      - cp {{.ARM64_OUT}} windows-stub-bundle/EFI/BOOT/BOOTAA64.EFI
+      - cp README.md     windows-stub-bundle/README.md
+      - |
+        cat > windows-stub-bundle/manifest.json <<EOF
+        {
+          "schemaVersion": 2,
+          "mediaType": "application/vnd.cloud-boot.windows-stub.v1",
+          "annotations": {
+            "org.opencontainers.image.title": "windows-stub",
+            "org.opencontainers.image.description": "Tiny PE32+ that mimics Windows Boot Manager for cloud-boot routing tests",
+            "org.opencontainers.image.source": "https://github.com/cloud-boot/windows-image"
+          }
+        }
+        EOF
+
+  push:
+    desc: Push the bundle to {{.REGISTRY}}:{{.TAG}} via ORAS (requires ORAS_AUTH or `oras login` first).
+    deps: [package]
+    cmds:
+      - |
+        if ! command -v oras >/dev/null; then
+          echo "oras not in PATH — install from https://oras.land" >&2
+          exit 1
+        fi
+      - >-
+        cd windows-stub-bundle &&
+        oras push {{.REGISTRY}}:{{.TAG}}
+        --artifact-type application/vnd.cloud-boot.windows-stub.v1
+        EFI/BOOT/BOOTX64.EFI:application/vnd.efi.binary
+        EFI/BOOT/BOOTAA64.EFI:application/vnd.efi.binary
+        README.md:application/vnd.oci.image.layer.v1.tar
+
+  clean:
+    desc: Remove build artifacts.
+    cmds:
+      - rm -rf *.o {{.AMD64_OUT}} {{.ARM64_OUT}} windows-stub-bundle

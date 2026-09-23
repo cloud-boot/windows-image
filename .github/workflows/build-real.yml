@@ -1,0 +1,60 @@
+name: Build real Windows image (TEMPLATE)
+
+# This workflow is intentionally NOT enabled by default in
+# cloud-boot/windows-image. Operators COPY this file into their
+# own fork (or a private repo in their own GitHub org) and set
+# the secrets to their own values:
+#
+#   secrets.MS_DEV_VM_URL          a URL the operator obtained by
+#                                  accepting Microsoft's dev-VM EULA
+#                                  on https://developer.microsoft.com/
+#                                  en-us/microsoft-edge/tools/vms/
+#
+#   secrets.WINDOWS_OCI_REGISTRY   the operator's OWN private GHCR
+#                                  namespace (e.g.
+#                                  ghcr.io/operator-org/cloud-boot-windows)
+#                                  — NOT ghcr.io/cloud-boot/anything.
+#
+#   secrets.OCI_PUSH_TOKEN         a GHCR write token scoped to the
+#                                  registry above.
+#
+# Running this workflow from cloud-boot/windows-image's OWN GHCR
+# would publish Microsoft IP under the cloud-boot org account,
+# which the dev-VM EULA forbids. So we ship the recipe; operators
+# host the result.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'OCI tag to push (default: latest)'
+        required: false
+        default: latest
+
+jobs:
+  build-and-stage:
+    if: github.repository != 'cloud-boot/windows-image'   # safety: never run in the cloud-boot org
+    runs-on: ubuntu-latest                                # use a self-hosted runner if you don't trust GH-hosted with MS_DEV_VM_URL
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install qemu-utils + zstd + oras
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-utils zstd unzip
+          curl -fL -o oras.tar.gz https://github.com/oras-project/oras/releases/download/v1.3.0/oras_1.3.0_linux_amd64.tar.gz
+          tar -xf oras.tar.gz
+          sudo mv oras /usr/local/bin/
+
+      - name: Download dev-VM VHDX (operator-EULA URL)
+        env:
+          MS_DEV_VM_URL: ${{ secrets.MS_DEV_VM_URL }}
+        run: bash scripts/download.sh
+
+      - name: Convert VHDX → raw → zstd → OCI push
+        env:
+          WINDOWS_OCI_REGISTRY: ${{ secrets.WINDOWS_OCI_REGISTRY }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          echo "${{ secrets.OCI_PUSH_TOKEN }}" | oras login "$(echo "$WINDOWS_OCI_REGISTRY" | cut -d/ -f1)" -u "$GITHUB_ACTOR" --password-stdin
+          bash scripts/vhdx-to-oci.sh

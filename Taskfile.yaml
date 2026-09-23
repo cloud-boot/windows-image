@@ -1,0 +1,58 @@
+# Top-level orchestrator for cloud-boot/windows-image.
+#
+# Two tracks:
+#
+#   STUB track (BSD-licensed, public):
+#     task build-stub     → BOOTX64.EFI + BOOTAA64.EFI under stub/
+#     task push-stub      → ghcr.io/cloud-boot/windows-stub:latest
+#
+#   REAL track (operator-staged, EULA-bound):
+#     task download       → operator-side dev-VM download
+#     task convert        → VHDX → raw
+#     task package        → raw + manifest
+#     task push           → operator's own private GHCR
+#
+# The stub-* tasks delegate to stub/Taskfile.yaml; the real-* tasks
+# call scripts/{download,vhdx-to-oci}.sh. The split is deliberate:
+# the stub is unconditionally distributable, the real disk is bound
+# to each operator's Microsoft license.
+
+version: '3'
+
+tasks:
+
+  default:
+    desc: List tasks.
+    cmds: ['task --list-all']
+    silent: true
+
+  # ----- STUB track (public, redistributable) -----
+
+  build-stub:
+    desc: Build BOOTX64.EFI + BOOTAA64.EFI of the windows-stub.
+    cmds:
+      - task -d stub build-amd64
+      - task -d stub build-arm64
+
+  push-stub:
+    desc: Publish the windows-stub bundle to ghcr.io/cloud-boot/windows-stub:latest (requires oras + GHCR auth).
+    cmds:
+      - task -d stub push
+
+  # ----- REAL track (operator-staged, EULA-bound) -----
+
+  download:
+    desc: Fetch a Microsoft dev VM VHDX into ./workdir/ — requires MS_DEV_VM_URL.
+    cmds:
+      - bash scripts/download.sh
+
+  convert-and-push:
+    desc: Convert ./workdir/*.vhdx → raw, zstd, OCI push to $WINDOWS_OCI_REGISTRY (operator's GHCR).
+    cmds:
+      - bash scripts/vhdx-to-oci.sh
+
+  clean:
+    desc: Wipe workdir + stub binaries.
+    cmds:
+      - rm -rf workdir
+      - task -d stub clean

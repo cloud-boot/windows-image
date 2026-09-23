@@ -1,0 +1,68 @@
+name: Publish windows-stub
+
+# Build + publish the BSD-licensed windows-stub PE binaries
+# (BOOTX64.EFI + BOOTAA64.EFI) to ghcr.io/cloud-boot/windows-stub
+# on every push to main. The stub carries no Microsoft IP, so this
+# workflow runs against cloud-boot's OWN GHCR namespace and the
+# resulting artifact is public-pullable.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'stub/**'
+      - '.github/workflows/publish-stub.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install TinyGo + LLVM + ORAS
+        run: |
+          # TinyGo from upstream .deb.
+          curl -fL -o tinygo.deb https://github.com/tinygo-org/tinygo/releases/download/v0.40.0/tinygo_0.40.0_amd64.deb
+          sudo dpkg -i tinygo.deb
+          # LLVM for the windows-gnu triples (clang assembles the thunks).
+          sudo apt-get update && sudo apt-get install -y clang lld
+          # ORAS for the OCI push.
+          curl -fL -o oras.tar.gz https://github.com/oras-project/oras/releases/download/v1.3.0/oras_1.3.0_linux_amd64.tar.gz
+          tar -xf oras.tar.gz
+          sudo mv oras /usr/local/bin/
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: '3.x'
+
+      # ⛔ CI CLONES THIS REPOSITORY ALONE. This step used to do
+      #     cd ../go-coff/pectl && go build ...
+      # which assumed a sibling checkout that exists on one developer's
+      # disk and on no runner. stub/Taskfile.yaml has the same assumption
+      # in its PECTL default, so the path is passed in explicitly below
+      # rather than left to that default.
+      - name: Fetch go-coff/pectl (the linker the stub build shells out to)
+        run: git clone --depth 1 --branch v0.3.0 https://github.com/go-coff/pectl.git "$RUNNER_TEMP/pectl"
+      - name: Build stub for amd64 + arm64
+        working-directory: stub
+        run: |
+          task build-amd64 PECTL="$RUNNER_TEMP/pectl"
+          task build-arm64 PECTL="$RUNNER_TEMP/pectl"
+          file BOOTX64.EFI BOOTAA64.EFI
+
+      - name: Log in to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push to ghcr.io/cloud-boot/windows-stub
+        working-directory: stub
+        run: task package push PECTL="$RUNNER_TEMP/pectl" REGISTRY=ghcr.io/cloud-boot/windows-stub TAG=latest
+
+      - name: Tag with git SHA too
+        working-directory: stub
+        run: task push PECTL="$RUNNER_TEMP/pectl" REGISTRY=ghcr.io/cloud-boot/windows-stub TAG=${{ github.sha }}
