@@ -2,3 +2,6 @@
 *.o
 *.EFI
 *.map
+
+# Task's checksum cache.
+.task/
