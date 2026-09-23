@@ -48,82 +48,82 @@ type efiSimpleTextOutput struct {
 // efiRuntimeServices is just enough of EFI_RUNTIME_SERVICES for
 // ResetSystem.
 type efiRuntimeServices struct {
-	hdr                    [24]byte // EFI_TABLE_HEADER
-	getTime                uintptr
-	setTime                uintptr
-	getWakeupTime          uintptr
-	setWakeupTime          uintptr
-	setVirtualAddressMap   uintptr
-	convertPointer         uintptr
-	getVariable            uintptr
-	getNextVariableName    uintptr
-	setVariable            uintptr
-	getNextHighMonotonic   uintptr
-	resetSystem            uintptr // (ResetType, ResetStatus, DataSize, ResetData)
+	hdr                  [24]byte // EFI_TABLE_HEADER
+	getTime              uintptr
+	setTime              uintptr
+	getWakeupTime        uintptr
+	setWakeupTime        uintptr
+	setVirtualAddressMap uintptr
+	convertPointer       uintptr
+	getVariable          uintptr
+	getNextVariableName  uintptr
+	setVariable          uintptr
+	getNextHighMonotonic uintptr
+	resetSystem          uintptr // (ResetType, ResetStatus, DataSize, ResetData)
 }
 
 // efiBootServices is just enough for OpenProtocol + Stall.
 type efiBootServices struct {
-	hdr                          [24]byte
-	raiseTPL                     uintptr
-	restoreTPL                   uintptr
-	allocatePages                uintptr
-	freePages                    uintptr
-	getMemoryMap                 uintptr
-	allocatePool                 uintptr
-	freePool                     uintptr
-	createEvent                  uintptr
-	setTimer                     uintptr
-	waitForEvent                 uintptr
-	signalEvent                  uintptr
-	closeEvent                   uintptr
-	checkEvent                   uintptr
-	installProtocolInterface     uintptr
-	reinstallProtocolInterface   uintptr
-	uninstallProtocolInterface   uintptr
-	handleProtocol               uintptr // (Handle, *GUID, **VOID) → status
-	reserved                     uintptr
-	registerProtocolNotify       uintptr
-	locateHandle                 uintptr
-	locateDevicePath             uintptr
-	installConfigurationTable    uintptr
-	loadImage                    uintptr
-	startImage                   uintptr
-	exit                         uintptr
-	unloadImage                  uintptr
-	exitBootServices             uintptr
-	getNextMonotonicCount        uintptr
-	stall                        uintptr // (Microseconds) → status
+	hdr                        [24]byte
+	raiseTPL                   uintptr
+	restoreTPL                 uintptr
+	allocatePages              uintptr
+	freePages                  uintptr
+	getMemoryMap               uintptr
+	allocatePool               uintptr
+	freePool                   uintptr
+	createEvent                uintptr
+	setTimer                   uintptr
+	waitForEvent               uintptr
+	signalEvent                uintptr
+	closeEvent                 uintptr
+	checkEvent                 uintptr
+	installProtocolInterface   uintptr
+	reinstallProtocolInterface uintptr
+	uninstallProtocolInterface uintptr
+	handleProtocol             uintptr // (Handle, *GUID, **VOID) → status
+	reserved                   uintptr
+	registerProtocolNotify     uintptr
+	locateHandle               uintptr
+	locateDevicePath           uintptr
+	installConfigurationTable  uintptr
+	loadImage                  uintptr
+	startImage                 uintptr
+	exit                       uintptr
+	unloadImage                uintptr
+	exitBootServices           uintptr
+	getNextMonotonicCount      uintptr
+	stall                      uintptr // (Microseconds) → status
 	// … rest omitted
 }
 
 // efiSystemTable is enough of EFI_SYSTEM_TABLE for our purposes.
 type efiSystemTable struct {
-	hdr                [24]byte
-	firmwareVendor     uintptr
-	firmwareRevision   uint32
-	_pad1              [4]byte
-	consoleInHandle    efiHandle
-	conIn              uintptr
-	consoleOutHandle   efiHandle
-	conOut             *efiSimpleTextOutput
-	stdErrHandle       efiHandle
-	stdErr             uintptr
-	runtimeServices    *efiRuntimeServices
-	bootServices       *efiBootServices
+	hdr              [24]byte
+	firmwareVendor   uintptr
+	firmwareRevision uint32
+	_pad1            [4]byte
+	consoleInHandle  efiHandle
+	conIn            uintptr
+	consoleOutHandle efiHandle
+	conOut           *efiSimpleTextOutput
+	stdErrHandle     efiHandle
+	stdErr           uintptr
+	runtimeServices  *efiRuntimeServices
+	bootServices     *efiBootServices
 	// numTableEntries + configurationTable omitted
 }
 
 // efiLoadedImageProtocol — the structure we need to inspect.
 // EFI_LOADED_IMAGE_PROTOCOL_GUID = 5B1B31A1-9562-11d2-8E3F-00A0C969723B
 type efiLoadedImageProtocol struct {
-	revision    uint32
-	_pad        [4]byte
-	parentImage efiHandle
-	systemTable *efiSystemTable
+	revision     uint32
+	_pad         [4]byte
+	parentImage  efiHandle
+	systemTable  *efiSystemTable
 	deviceHandle efiHandle
-	filePath    uintptr // *EFI_DEVICE_PATH_PROTOCOL — what we assert non-NULL
-	reserved    uintptr
+	filePath     uintptr // *EFI_DEVICE_PATH_PROTOCOL — what we assert non-NULL
+	reserved     uintptr
 	// … remaining fields omitted; we only need filePath
 }
 
