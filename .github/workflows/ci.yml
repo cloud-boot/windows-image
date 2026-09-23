@@ -1,0 +1,71 @@
+name: ci
+
+# publish-stub.yml only runs on pushes to main, so until this file existed a
+# pull request here had NO check at all -- and "no checks" reads as green to
+# anything that asks whether something is failing. It also meant the first time
+# the stub build ever ran was on main, where it failed: stub/ had no go.mod.
+#
+# This is the same job minus the publish. It builds both stubs and stops.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: the stub builds for amd64 and arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install TinyGo + LLVM
+        run: |
+          curl -fL -o tinygo.deb https://github.com/tinygo-org/tinygo/releases/download/v0.40.0/tinygo_0.40.0_amd64.deb
+          sudo dpkg -i tinygo.deb
+          sudo apt-get update && sudo apt-get install -y clang lld
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: '3.x'
+
+      # CI checks out this repository alone, so the linker the stub build shells
+      # out to has to be fetched. stub/Taskfile.yaml does `cd $PECTL && go run .`
+      # -- it wants pectl's SOURCE tree, not a binary -- so this clones.
+      - name: Fetch go-coff/pectl
+        run: git clone --depth 1 --branch v0.3.0 https://github.com/go-coff/pectl.git "$RUNNER_TEMP/pectl"
+
+      - name: gofmt
+        run: |
+          drift=$(gofmt -l stub/)
+          if [ -n "$drift" ]; then echo "::error::not gofmt-clean:"; echo "$drift"; exit 1; fi
+
+      - name: Build stub for amd64 + arm64
+        working-directory: stub
+        run: |
+          task build-amd64 PECTL="$RUNNER_TEMP/pectl"
+          task build-arm64 PECTL="$RUNNER_TEMP/pectl"
+          file BOOTX64.EFI BOOTAA64.EFI
+
+  no-sibling-paths:
+    name: nothing depends on a checkout that is not here
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          set -uo pipefail
+          # Three separate places in this repository assumed a sibling checkout
+          # of go-coff. A default that is right on one disk is not a default.
+          bad=$(grep -rn 'cd \.\./go-coff\|\.\./\.\./\.\./go-coff' \
+                  .github/workflows/ stub/Taskfile.yaml Taskfile.yaml 2>/dev/null \
+                | grep -v '^\s*#' | grep -v '# ' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::a build step points outside this repository:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "no sibling-checkout assumptions outside comments"
