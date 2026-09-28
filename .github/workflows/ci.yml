@@ -32,6 +32,16 @@ jobs:
         uses: arduino/setup-task@v2
         with:
           version: '3.x'
+          # ⛔ Without a token this action resolves the Task release through
+          # the GitHub API ANONYMOUSLY, which shares one quota with every
+          # other job on the runner's IP. That is what failed here:
+          #
+          #   API rate limit exceeded for 20.186.239.67
+          #
+          # It reads as a broken pull request -- the one open at the time was
+          # a bump of this very action -- and it is a shared quota running
+          # out. repo-token makes the request the repository's own.
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       # CI checks out this repository alone, so the linker the stub build shells
       # out to has to be fetched. stub/Taskfile.yaml does `cd $PECTL && go run .`
